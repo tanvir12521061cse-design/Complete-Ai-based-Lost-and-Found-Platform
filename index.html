@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Finder Pro - Fixed & Final</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        :root { --p: #0084ff; --bg: #f0f2f5; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); margin: 0; }
+        .hidden { display: none !important; }
+
+        /* Login & Registration Style */
+        #auth-section { height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #0084ff, #00c6ff); }
+        .auth-card { background: white; padding: 30px; border-radius: 20px; width: 350px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        
+        header { background: white; padding: 12px 5%; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.1); sticky: top; z-index: 100; }
+        .container { padding: 20px 5%; }
+        #map { height: 250px; border-radius: 15px; margin-bottom: 20px; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+        .card { background: white; border-radius: 15px; overflow: hidden; border: 1px solid #ddd; position: relative; }
+        .card img { width: 100%; height: 180px; object-fit: cover; }
+        .card-body { padding: 15px; }
+        .badge { position: absolute; top: 10px; left: 10px; padding: 5px 12px; border-radius: 20px; color: white; font-size: 11px; font-weight: bold; text-transform: uppercase; }
+        .bg-lost { background: #ff4d4d; }
+        .bg-found { background: #2ecc71; }
+
+        /* Messenger Chat */
+        #chat-window { position: fixed; bottom: 0; right: 20px; width: 320px; background: white; border-radius: 15px 15px 0 0; box-shadow: 0 -5px 25px rgba(0,0,0,0.2); display: none; z-index: 2000; }
+        .chat-header { background: var(--p); color: white; padding: 12px; font-weight: bold; display: flex; justify-content: space-between; border-radius: 15px 15px 0 0; }
+        .chat-body { height: 300px; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; background: #fff; }
+        .msg { max-width: 80%; padding: 8px 12px; border-radius: 15px; font-size: 14px; }
+        .msg.sent { align-self: flex-end; background: var(--p); color: white; border-bottom-right-radius: 2px; }
+        .msg.received { align-self: flex-start; background: #e4e6eb; color: black; border-bottom-left-radius: 2px; }
+        .chat-input { padding: 10px; display: flex; border-top: 1px solid #eee; }
+        .chat-input input { flex: 1; border: none; background: #f0f2f5; padding: 8px 15px; border-radius: 20px; outline: none; }
+
+        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 3000; }
+        .modal-content { background: white; padding: 25px; border-radius: 20px; width: 90%; max-width: 400px; }
+
+        input, select { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 10px; box-sizing: border-box; }
+        .btn { padding: 12px 20px; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; }
+        .btn-p { background: var(--p); color: white; width: 100%; }
+        .btn-danger { background: #f02849; color: white; width: 100%; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+    <div id="auth-section">
+        <div class="auth-card" id="login-box">
+            <h2 style="text-align:center; color:var(--p)">Login</h2>
+            <input type="text" id="l-num" placeholder="Phone Number">
+            <input type="password" id="l-pass" placeholder="Password">
+            <button class="btn btn-p" onclick="doLogin()">Login</button>
+            <p style="text-align:center; font-size:14px">New here? <a href="#" onclick="toggleAuth()">Register</a></p>
+        </div>
+        <div class="auth-card hidden" id="reg-box">
+            <h2 style="text-align:center; color:var(--p)">Register</h2>
+            <input type="text" id="r-name" placeholder="Full Name">
+            <input type="text" id="r-num" placeholder="Phone Number">
+            <input type="password" id="r-pass" placeholder="Password">
+            <button class="btn btn-p" onclick="doRegister()">Sign Up</button>
+            <p style="text-align:center; font-size:14px">Joined already? <a href="#" onclick="toggleAuth()">Login</a></p>
+        </div>
+    </div>
+
+    <div id="app-section" class="hidden">
+        <header>
+            <div style="font-weight: 900; color: var(--p); font-size: 24px;">AI FINDER</div>
+            <div style="display:flex; gap:10px;">
+                <button class="btn btn-p" onclick="openModal()" style="width:auto">+ Report Item</button>
+                <button onclick="doLogout()" style="background:none; border:none; color:#666; cursor:pointer">Logout</button>
+            </div>
+        </header>
+
+        <div class="container">
+            <div id="map"></div>
+            <h3>Live Reports</h3>
+            <div class="grid" id="itemGrid"></div>
+        </div>
+    </div>
+
+    <div class="modal" id="postModal">
+        <div class="modal-content">
+            <h3>New Report</h3>
+            <select id="i-type">
+                <option value="lost">Lost Item</option>
+                <option value="found">Found Item</option>
+            </select>
+            <input type="text" id="i-name" placeholder="What did you lose/find?">
+            <input type="text" id="i-contact" placeholder="Contact Number">
+            <input type="file" id="i-file" accept="image/*">
+            <div id="ai-label" style="font-size:12px; color:var(--p); margin-bottom:5px;"></div>
+            <div id="mini-map" style="height:120px; border-radius:10px; margin-bottom:10px;"></div>
+            <button class="btn btn-p" onclick="submitPost()">Submit & Match</button>
+            <button class="btn" onclick="closeModal()" style="width:100%; background:none;">Cancel</button>
+        </div>
+    </div>
+
+    <div id="chat-window">
+        <div class="chat-header">
+            <span id="chat-user">Chat</span>
+            <span onclick="closeChat()" style="cursor:pointer">✖</span>
+        </div>
+        <div class="chat-body" id="chat-msgs"></div>
+        <div class="chat-input">
+            <input type="text" id="chat-input-field" placeholder="Aa" onkeypress="if(event.key==='Enter') sendMsg()">
+            <button onclick="sendMsg()" style="background:none; border:none; color:var(--p); font-weight:bold; cursor:pointer;">Send</button>
+        </div>
+        <div style="padding: 10px;">
+            <button class="btn btn-danger" onclick="resolveAndRemove()">Resolve & Delete Post</button>
+        </div>
+    </div>
+
+    <script>
+        let items = JSON.parse(localStorage.getItem('final_items')) || [];
+        let users = JSON.parse(localStorage.getItem('final_users')) || [];
+        let model, map, miniMap, selectedLoc = [23.8103, 90.4125], tempImg = "", tempTag = "Object", matchedIds = [];
+
+        cocoSsd.load().then(m => model = m);
+
+        // Auth Logic
+        function toggleAuth() { document.getElementById('login-box').classList.toggle('hidden'); document.getElementById('reg-box').classList.toggle('hidden'); }
+        function doRegister() {
+            const name = document.getElementById('r-name').value, num = document.getElementById('r-num').value, pass = document.getElementById('r-pass').value;
+            if(!name || !num || !pass) return alert("Fill all fields");
+            users.push({name, num, pass});
+            localStorage.setItem('final_users', JSON.stringify(users));
+            alert("Success! Now Login."); toggleAuth();
+        }
+        function doLogin() {
+            const num = document.getElementById('l-num').value, pass = document.getElementById('l-pass').value;
+            const user = users.find(u => u.num === num && u.pass === pass);
+            if(user) { localStorage.setItem('active_session', JSON.stringify(user)); checkSession(); }
+            else alert("Error: Wrong details!");
+        }
+        function checkSession() {
+            if(localStorage.getItem('active_session')) {
+                document.getElementById('auth-section').classList.add('hidden');
+                document.getElementById('app-section').classList.remove('hidden');
+                setTimeout(() => { initMaps(); render(); }, 300);
+            }
+        }
+        function doLogout() { localStorage.removeItem('active_session'); location.reload(); }
+
+        // Maps
+        function initMaps() {
+            if(map) return;
+            map = L.map('map').setView([23.8103, 90.4125], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            miniMap = L.map('mini-map').setView([23.8103, 90.4125], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(miniMap);
+            miniMap.on('click', (e) => { selectedLoc = [e.latlng.lat, e.latlng.lng]; L.marker(selectedLoc).addTo(miniMap); });
+        }
+
+        // AI & Form Handling
+        document.getElementById('i-file').onchange = (e) => {
+            const reader = new FileReader();
+            reader.onload = async (f) => {
+                tempImg = f.target.result;
+                const img = new Image(); img.src = tempImg;
+                img.onload = async () => {
+                    const res = await model.detect(img);
+                    tempTag = res.length > 0 ? res[0].class : "Object";
+                    document.getElementById('ai-label').innerText = "AI Identified: " + tempTag.toUpperCase();
+                };
+            };
+            reader.readAsDataURL(e.target.files[0]);
+        }
+
+        function submitPost() {
+            const nameField = document.getElementById('i-name'), contactField = document.getElementById('i-contact'), typeField = document.getElementById('i-type');
+            if(!nameField.value || !tempImg) return alert("Data missing!");
+
+            const newItem = { id: Date.now(), name: nameField.value, contact: contactField.value, type: typeField.value, img: tempImg, tag: tempTag, loc: selectedLoc };
+            const match = items.find(i => i.type !== newItem.type && (i.tag === tempTag || i.name.toLowerCase().includes(newItem.name.toLowerCase())));
+
+            items.unshift(newItem);
+            localStorage.setItem('final_items', JSON.stringify(items));
+            
+            // --- FIX: CLEARING THE FORM ---
+            nameField.value = ""; contactField.value = ""; document.getElementById('i-file').value = "";
+            document.getElementById('ai-label').innerText = ""; tempImg = ""; tempTag = "Object";
+            
+            closeModal();
+            render();
+
+            if(match) {
+                matchedIds = [newItem.id, match.id];
+                openChat(match.name, match.contact);
+            }
+        }
+
+        // Messenger
+        function openChat(name, contact) {
+            document.getElementById('chat-window').style.display = 'block';
+            document.getElementById('chat-user').innerText = "Chat Re: " + name;
+            document.getElementById('chat-msgs').innerHTML = `<div class="msg received">Match Found! Item: ${name}. Contact: ${contact}</div>`;
+        }
+
+        function sendMsg() {
+            const input = document.getElementById('chat-input-field');
+            if(!input.value) return;
+            const div = document.createElement('div');
+            div.className = 'msg sent'; div.innerText = input.value;
+            document.getElementById('chat-msgs').appendChild(div);
+            input.value = "";
+        }
+
+        function resolveAndRemove() {
+            items = items.filter(i => !matchedIds.includes(i.id));
+            localStorage.setItem('final_items', JSON.stringify(items));
+            document.getElementById('chat-window').style.display = 'none';
+            render();
+            alert("Match Resolved! Items removed.");
+        }
+
+        function render() {
+            const grid = document.getElementById('itemGrid');
+            grid.innerHTML = items.map(i => `
+                <div class="card">
+                    <div class="badge ${i.type === 'lost' ? 'bg-lost' : 'bg-found'}">${i.type}</div>
+                    <img src="${i.img}">
+                    <div class="card-body">
+                        <h4 style="margin:5px 0">${i.name}</h4>
+                        <p style="font-size:13px; margin:0">📞 ${i.contact}</p>
+                    </div>
+                </div>`).join('');
+        }
+
+        function openModal() { document.getElementById('postModal').style.display = 'flex'; setTimeout(() => miniMap.invalidateSize(), 200); }
+        function closeModal() { document.getElementById('postModal').style.display = 'none'; }
+        function closeChat() { document.getElementById('chat-window').style.display = 'none'; }
+
+        checkSession();
+    </script>
+</body>
+</html>
